@@ -1,19 +1,36 @@
-// 文件: src/components/AntdMovieDashboard.js
+// src/components/AntdMovieDashboard.js
 import React, { useState } from 'react';
-import { Layout, Menu, Spin, Alert } from 'antd';
+import { Layout, Menu, Alert, Spin, Dropdown, Button, Space, Avatar, Typography } from 'antd';
 import { 
   UserOutlined, 
   VideoCameraOutlined, 
-  FundOutlined,
-  HistoryOutlined 
+  PieChartOutlined,
+  BarChartOutlined,
+  HistoryOutlined,
+  LogoutOutlined,
+  DownOutlined
 } from '@ant-design/icons';
-import { BarChart, PieChart, Pie, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import useMovieData from '../hooks/useMovieData';
+import { useAuth } from '../contexts/AuthContext';
 
-// 样式导入
-import 'antd/dist/reset.css';
+// 导入图表组件
+import ActorsRankingChart from './charts/ActorsRankingChart';
+import DirectorsRankingChart from './charts/DirectorsRankingChart';
+import GenresBarChart from './charts/GenresBarChart';
+import GenresPieChart from './charts/GenresPieChart';
+import DecadesDistributionChart from './charts/DecadesDistributionChart';
+
+// 导入通用组件
+import ChartContainer from './common/ChartContainer';
+import DataTable from './common/DataTable';
+
+// 导入表格配置
+import { tableColumns, prepareTableData } from './common/tableColumnsConfig';
 
 const { Header, Content, Sider } = Layout;
+const { SubMenu } = Menu;
+const { Text } = Typography;
 
 // 定义常用的颜色集
 const CHART_COLORS = [
@@ -25,10 +42,96 @@ const CHART_COLORS = [
 const AntdMovieDashboard = ({ apiBaseUrl = 'http://localhost:5000' }) => {
   // 使用自定义Hook获取数据
   const { data, isLoading, error, isUsingSampleData } = useMovieData(apiBaseUrl);
+  
   // 状态管理
-  const [selectedKey, setSelectedKey] = useState('actors');
+  const [selectedKey, setSelectedKey] = useState('actorsRanking'); // 左侧菜单选中项
+  const [viewMode, setViewMode] = useState('chart'); // 'chart' 或 'table'
+  const [collapsed, setCollapsed] = useState(false); // 侧边栏折叠状态
+  
+  // 添加身份验证和导航
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // 渲染选中的内容
+  // 处理登出
+  const handleLogout = async () => {
+    const success = await logout();
+    if (success) {
+      navigate('/login');
+    }
+  };
+
+  // 用户菜单
+  const userMenu = (
+    <Menu>
+      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={handleLogout}>
+        登出
+      </Menu.Item>
+    </Menu>
+  );
+
+  // 获取当前数据类型
+  const getCurrentDataType = () => {
+    if (selectedKey.includes('actors')) return 'actors';
+    if (selectedKey.includes('director')) return 'directors';
+    if (selectedKey.includes('genres')) return 'genres';
+    if (selectedKey.includes('decades')) return 'decades';
+    return 'actors'; // 默认
+  };
+
+  // 获取标题
+  const getTitle = () => {
+    switch(selectedKey) {
+      case 'actorsRanking':
+        return '演员出演电影排行';
+      case 'directorsRanking':
+        return '导演作品数量排行';
+      case 'genresBarChart':
+        return '电影类型分布 (柱状图)';
+      case 'genresPieChart':
+        return '电影类型分布 (饼图)';
+      case 'decadesDistribution':
+        return '电影年代分布';
+      default:
+        return '豆瓣电影数据分析';
+    }
+  };
+
+  // 渲染图表内容
+  const renderChartContent = () => {
+    // 基于选中的菜单项渲染不同图表
+    switch (selectedKey) {
+      case 'actorsRanking':
+        return <ActorsRankingChart data={data.actors} />;
+      
+      case 'directorsRanking':
+        return <DirectorsRankingChart data={data.directors} />;
+      
+      case 'genresBarChart':
+        return <GenresBarChart data={data.genres} />;
+      
+      case 'genresPieChart':
+        return <GenresPieChart data={data.genres} />;
+      
+      case 'decadesDistribution':
+        return <DecadesDistributionChart data={data.decades} />;
+      
+      default:
+        return <div>请从左侧菜单选择一个图表类型</div>;
+    }
+  };
+
+  // 渲染表格内容
+  const renderTableContent = () => {
+    const dataType = getCurrentDataType();
+    return (
+      <DataTable 
+        data={prepareTableData(data, dataType)} 
+        columns={tableColumns[dataType]} 
+      />
+    );
+  };
+
+  // 渲染内容区域
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -39,169 +142,95 @@ const AntdMovieDashboard = ({ apiBaseUrl = 'http://localhost:5000' }) => {
       );
     }
 
-    switch (selectedKey) {
-      case 'actors':
-        return (
-          <div className="chart-container">
-            <h2>出演次数最多的演员 (Top 20)</h2>
-            <ResponsiveContainer width="100%" height={500}>
-              <BarChart 
-                data={data.actors.slice(0, 20)}
-                layout="vertical"
-                margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="actor" width={100} />
-                <Tooltip formatter={(value) => [`${value} 部电影`, '出演数量']} />
-                <Legend />
-                <Bar dataKey="count" name="出演电影数" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      
-      case 'directors':
-        return (
-          <div className="chart-container">
-            <h2>出现次数最多的导演 (Top 15)</h2>
-            <ResponsiveContainer width="100%" height={500}>
-              <BarChart 
-                data={data.directors.slice(0, 15)}
-                layout="vertical"
-                margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="director" width={100} />
-                <Tooltip formatter={(value) => [`${value} 部电影`, '导演数量']} />
-                <Legend />
-                <Bar dataKey="count" name="导演电影数" fill="#82ca9d" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      
-      case 'genres':
-        return (
-          <div className="chart-container">
-            <h2>各类型电影数量分布</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart 
-                  data={data.genres.slice(0, 10)}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="genre" angle={-45} textAnchor="end" height={80} />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`${value} 部电影`, '电影数量']} />
-                  <Legend />
-                  <Bar dataKey="count" name="电影数量">
-                    {data.genres.slice(0, 10).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={data.genres.slice(0, 10)}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={true}
-                    outerRadius={150}
-                    fill="#8884d8"
-                    dataKey="count"
-                    nameKey="genre"
-                    label={({ genre, percent }) => `${genre}: ${(percent * 100).toFixed(1)}%`}
-                  >
-                    {data.genres.slice(0, 10).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value, name, props) => [`${value} 部电影`, props.payload.genre]} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        );
-      
-      case 'decades':
-        return (
-          <div className="chart-container">
-            <h2>电影年代分布</h2>
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart
-                data={data.decades}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="decade" />
-                <YAxis />
-                <Tooltip formatter={(value) => [`${value} 部电影`, '数量']} />
-                <Legend />
-                <Bar dataKey="count" name="电影数量">
-                  {data.decades.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        );
-      
-      default:
-        return null;
-    }
+    return (
+      <ChartContainer 
+        title={getTitle()} 
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      >
+        {viewMode === 'chart' ? renderChartContent() : renderTableContent()}
+        
+        {isUsingSampleData && (
+          <Alert
+            message="注意"
+            description={`API连接失败，显示示例数据以供参考。错误: ${error}`}
+            type="warning"
+            showIcon
+            style={{ marginTop: 20 }}
+          />
+        )}
+      </ChartContainer>
+    );
   };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={200} theme="light">
-        <div className="logo" style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <h3 style={{ color: '#001529', margin: 0 }}>豆瓣电影分析</h3>
+      <Sider 
+        width={220} 
+        theme="light" 
+        collapsible 
+        collapsed={collapsed} 
+        onCollapse={setCollapsed}
+      >
+        <div className="logo" style={{ 
+          height: '64px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          padding: '0 16px',
+          overflow: 'hidden'
+        }}>
+          {!collapsed ? (
+            <h3 style={{ color: '#001529', margin: 0 }}>豆瓣电影分析</h3>
+          ) : (
+            <PieChartOutlined style={{ fontSize: '24px' }} />
+          )}
         </div>
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
-          style={{ height: '100%' }}
+          defaultOpenKeys={['doubanMovieAnalysis']}
+          style={{ height: '100%', borderRight: 0 }}
           onSelect={({ key }) => setSelectedKey(key)}
         >
-          <Menu.Item key="actors" icon={<UserOutlined />}>
-            演员排行
-          </Menu.Item>
-          <Menu.Item key="directors" icon={<VideoCameraOutlined />}>
-            导演排行
-          </Menu.Item>
-          <Menu.Item key="genres" icon={<FundOutlined />}>
-            电影类型
-          </Menu.Item>
-          <Menu.Item key="decades" icon={<HistoryOutlined />}>
-            年代分布
-          </Menu.Item>
+          <SubMenu key="doubanMovieAnalysis" icon={<PieChartOutlined />} title="豆瓣电影分析">
+            <Menu.Item key="actorsRanking" icon={<UserOutlined />}>演员出演排行</Menu.Item>
+            <Menu.Item key="directorsRanking" icon={<VideoCameraOutlined />}>导演作品排行</Menu.Item>
+            <Menu.Item key="genresBarChart" icon={<BarChartOutlined />}>电影类型柱状图</Menu.Item>
+            <Menu.Item key="genresPieChart" icon={<PieChartOutlined />}>电影类型饼图</Menu.Item>
+            <Menu.Item key="decadesDistribution" icon={<HistoryOutlined />}>电影年代分布</Menu.Item>
+          </SubMenu>
         </Menu>
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', padding: 0, paddingLeft: 16 }}>
-          <h2>豆瓣电影数据可视化</h2>
+        <Header style={{ 
+          background: '#fff', 
+          padding: '0 16px', 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 4px rgba(0,21,41,.08)'
+        }}>
+          <div>
+            <h2 style={{ margin: 0 }}>豆瓣电影数据可视化</h2>
+          </div>
+          <div>
+            {currentUser && (
+              <Dropdown overlay={userMenu} trigger={['click']}>
+                <Button type="text">
+                  <Space>
+                    <Avatar icon={<UserOutlined />} />
+                    <Text strong>{currentUser.username}</Text>
+                    <DownOutlined />
+                  </Space>
+                </Button>
+              </Dropdown>
+            )}
+          </div>
         </Header>
         <Content style={{ margin: '24px 16px 0', overflow: 'initial' }}>
-          <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
+          <div style={{ padding: 24, background: '#fff', minHeight: 360, borderRadius: '2px' }}>
             {renderContent()}
-            
-            {/* 如果使用的是示例数据，显示提示 */}
-            {isUsingSampleData && (
-              <Alert
-                message="注意"
-                description={`API连接失败，显示示例数据以供参考。错误: ${error}`}
-                type="warning"
-                showIcon
-                style={{ marginTop: 20 }}
-              />
-            )}
           </div>
         </Content>
       </Layout>
